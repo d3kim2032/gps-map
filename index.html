@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Smart GPS App</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <style>
+    body { font-family: Arial; }
+    #map { height: 500px; margin-top: 10px; }
+    #instructions {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f0f0f0;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+<h2>🧭 Smart GPS Navigation</h2>
+
+<input type="text" id="search" placeholder="Search place (e.g. Seoul)">
+<button onclick="searchPlace()">🔍 Search</button>
+<button onclick="startNavigation()">▶️ Start Navigation</button>
+
+<div id="map"></div>
+<div id="instructions">Click map or search to add places</div>
+
+<script>
+  const map = L.map('map').setView([37.5665, 126.9780], 13);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  let places = [];
+  let routeCoords = [];
+  let gpsMarker;
+  let step = 0;
+
+  // 🖱️ Click map to add place
+  map.on('click', function(e) {
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+
+    L.marker([lat, lng]).addTo(map).bindPopup("Custom Place");
+
+    places.push([lng, lat]);
+  });
+
+  // 🔍 Search place using Nominatim (free)
+  async function searchPlace() {
+    const query = document.getElementById("search").value;
+
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.length === 0) {
+      alert("Place not found");
+      return;
+    }
+
+    const lat = parseFloat(data[0].lat);
+    const lng = parseFloat(data[0].lon);
+
+    map.setView([lat, lng], 14);
+
+    L.marker([lat, lng]).addTo(map).bindPopup(query);
+
+    places.push([lng, lat]);
+  }
+
+  async function getRoute() {
+    if (places.length < 2) {
+      alert("Add at least 2 places");
+      return;
+    }
+
+    const coords = places.map(p => p.join(",")).join(";");
+
+    const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    routeCoords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+
+    L.polyline(routeCoords, { color: 'blue' }).addTo(map);
+
+    startMoving();
+  }
+
+  function startNavigation() {
+    getRoute();
+  }
+
+  function startMoving() {
+    step = 0;
+
+    if (gpsMarker) map.removeLayer(gpsMarker);
+
+    gpsMarker = L.circleMarker(routeCoords[0], {
+      radius: 8,
+      color: 'red'
+    }).addTo(map);
+
+    move();
+  }
+
+  function move() {
+    if (step >= routeCoords.length) {
+      document.getElementById("instructions").innerText = "🎉 Arrived!";
+      return;
+    }
+
+    gpsMarker.setLatLng(routeCoords[step]);
+    map.setView(routeCoords[step]);
+
+    document.getElementById("instructions").innerText =
+      "🚗 Navigating...";
+
+    step++;
+
+    setTimeout(move, 80);
+  }
+
+  // 🚇 Subway lines
+  const subwayLines = [
+    [[37.56,126.97],[37.57,126.98],[37.58,126.99]],
+    [[37.565,126.99],[37.57,127.01],[37.56,127.02],[37.55,127.00]],
+    [[37.57,126.97],[37.58,126.96],[37.59,126.95]]
+  ];
+
+  subwayLines.forEach((line, i) => {
+    L.polyline(line, {
+      color: ['blue','green','orange'][i],
+      weight: 5
+    }).addTo(map).bindPopup("Subway Line " + (i+1));
+  });
+
+</script>
+
+</body>
+</html>
