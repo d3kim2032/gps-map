@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Imaginary Country - GPS on Roads & Subway</title>
+  <title>Imaginary Country - Editable Roads & Subway</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.pm/dist/leaflet.pm.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.pm/dist/leaflet.pm.min.js"></script>
   <style>
     body { font-family: Arial; }
     #map { height: 700px; width: 700px; margin: 20px auto; border: 2px solid #333; }
@@ -13,14 +15,14 @@
 </head>
 <body>
 
-<h2 style="text-align:center;">🗺️ Imaginary Country - GPS Along Roads & Subway</h2>
+<h2 style="text-align:center;">🗺️ Imaginary Country - Editable Roads & Subway</h2>
 
 <input type="text" id="search" placeholder="Add city by name">
 <button onclick="searchPlace()">🔍 Add City</button>
 <button onclick="startNavigation()">▶️ Start Navigation</button>
 
 <div id="map"></div>
-<div id="instructions">Click to add places. Click a city to select START & END. GPS will follow roads/subways.</div>
+<div id="instructions">Click to add cities, roads, subway lines. Drag road/subway points to reshape. Click a city to set START & END.</div>
 
 <script>
   const map = L.map('map', { crs: L.CRS.Simple, minZoom: -1, maxZoom: 2 }).setView([350, 350], 0);
@@ -37,7 +39,9 @@
   let gpsMarker;
   let step = 0;
 
-  // Add places manually
+  // Enable editing
+  map.pm.addControls({ position: 'topright', drawMarker: false, drawPolygon: false, drawCircle: false, drawCircleMarker: false, drawRectangle: false });
+
   map.on('click', function(e){
     const x = e.latlng.lat;
     const y = e.latlng.lng;
@@ -54,12 +58,14 @@
         cities.push({name,x,y,marker});
         break;
       case "road":
-        const roadLine = L.polyline([[x,y],[x+20,y]],{color:'gray',weight:3}).addTo(map).bindPopup(name);
-        roads.push({name,coords:[[x,y],[x+20,y]]});
+        const roadLine = L.polyline([[x,y],[x+50,y]],{color:'gray',weight:3}).addTo(map).bindPopup(name);
+        roadLine.pm.enable({ allowSelfIntersection: true });
+        roads.push({name,layer:roadLine});
         break;
       case "subway":
-        const subwayLine = L.polyline([[x,y],[x+20,y+20]],{color:'orange',weight:5}).addTo(map).bindPopup(name);
-        subwayLines.push({name,coords:[[x,y],[x+20,y+20]]});
+        const subwayLine = L.polyline([[x,y],[x+50,y+50]],{color:'orange',weight:5}).addTo(map).bindPopup(name);
+        subwayLine.pm.enable({ allowSelfIntersection: true });
+        subwayLines.push({name,layer:subwayLine});
         break;
       default:
         alert("Invalid type!");
@@ -68,14 +74,13 @@
 
   function searchPlace(){
     const name = document.getElementById("search").value;
-    if(!name) return alert("Enter city name");
+    if(!name) return alert("Enter place name");
 
     const x = Math.random()*700;
     const y = Math.random()*700;
 
     const marker = L.marker([x,y]).addTo(map).bindPopup(name);
     marker.on('click', ()=> selectStartEnd(marker,{x,y,name}));
-
     cities.push({name,x,y,marker});
   }
 
@@ -94,20 +99,19 @@
   function startNavigation(){
     if(!startPoint || !endPoint) return alert("Select START and END points");
 
-    // Combine roads + subway for routing
     let allLines = roads.concat(subwayLines);
     if(allLines.length===0){
-      // No lines, just straight line
       routeCoords = [[startPoint.x,startPoint.y],[endPoint.x,endPoint.y]];
     } else {
-      // Simple "closest line" path: move along first line near start, then straight to end
       let closestLine = allLines.reduce((best,line)=>{
-        const dist = line.coords.reduce((min,c)=>Math.min(min,distance(c,[startPoint.x,startPoint.y])),Infinity);
+        const coords = line.layer.getLatLngs();
+        const dist = coords.reduce((min,c)=>Math.min(min,distance([c.lat,c.lng],[startPoint.x,startPoint.y])),Infinity);
         return dist<best.dist?{line,line,dist}:best;
       },{line:null,dist:Infinity}).line;
 
       if(closestLine){
-        routeCoords = [ [startPoint.x,startPoint.y], ...closestLine.coords, [endPoint.x,endPoint.y] ];
+        const coords = closestLine.layer.getLatLngs().map(c=>[c.lat,c.lng]);
+        routeCoords = [[startPoint.x,startPoint.y], ...coords, [endPoint.x,endPoint.y]];
       } else {
         routeCoords = [[startPoint.x,startPoint.y],[endPoint.x,endPoint.y]];
       }
@@ -136,7 +140,6 @@
   function distance(a,b){
     return Math.sqrt(Math.pow(a[0]-b[0],2)+Math.pow(a[1]-b[1],2));
   }
-
 </script>
 
 </body>
