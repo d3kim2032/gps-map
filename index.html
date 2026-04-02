@@ -1,146 +1,143 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Imaginary Country Subway GPS</title>
+  <title>Imaginary Country - GPS on Roads & Subway</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <style>
     body { font-family: Arial; }
-    #map { height: 500px; margin-top: 10px; }
-    #instructions {
-      margin-top: 10px;
-      padding: 10px;
-      background: #f0f0f0;
-      font-weight: bold;
-    }
+    #map { height: 700px; width: 700px; margin: 20px auto; border: 2px solid #333; }
+    #instructions { margin-top: 10px; padding: 10px; background: #f0f0f0; font-weight: bold; width:700px; margin:auto; }
     input, button { margin: 5px; }
   </style>
 </head>
 <body>
 
-<h2>🚇 Imaginary Country Subway GPS</h2>
+<h2 style="text-align:center;">🗺️ Imaginary Country - GPS Along Roads & Subway</h2>
 
 <input type="text" id="search" placeholder="Add city by name">
 <button onclick="searchPlace()">🔍 Add City</button>
 <button onclick="startNavigation()">▶️ Start Navigation</button>
 
 <div id="map"></div>
-<div id="instructions">Click city markers to select START and END points on subway lines</div>
+<div id="instructions">Click to add places. Click a city to select START & END. GPS will follow roads/subways.</div>
 
 <script>
-  const map = L.map('map').setView([0,0],2);
+  const map = L.map('map', { crs: L.CRS.Simple, minZoom: -1, maxZoom: 2 }).setView([350, 350], 0);
+  const bounds = [[0,0],[700,700]];
+  L.rectangle(bounds,{color:'#fefefe',weight:1}).addTo(map);
+  map.fitBounds(bounds);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    attribution:'© OpenStreetMap'
-  }).addTo(map);
-
-  let cities=[];
-  let startPoint=null;
-  let endPoint=null;
+  let cities = [];
+  let roads = [];
+  let subwayLines = [];
+  let startPoint = null;
+  let endPoint = null;
+  let routeCoords = [];
   let gpsMarker;
-  let step=0;
-  let subwayLines=[];
+  let step = 0;
 
-  // Subway lines (fake coordinates)
-  subwayLines=[
-    {name:'Blue Line', coords:[[10,10],[15,15],[20,20]], color:'blue'},
-    {name:'Green Line', coords:[[-10,5],[0,10],[10,5],[0,0]], color:'green'},
-    {name:'Orange Line', coords:[[-20,-10],[-15,-5],[-10,-15]], color:'orange'}
-  ];
-
-  // Draw subway lines
-  subwayLines.forEach(line=>{
-    L.polyline(line.coords,{color:line.color,weight:5}).addTo(map).bindPopup(line.name);
-  });
-
-  // Add city by clicking map
-  map.on('click',function(e){
-    const lat=e.latlng.lat;
-    const lng=e.latlng.lng;
-    const name=prompt("Enter city name:");
+  // Add places manually
+  map.on('click', function(e){
+    const x = e.latlng.lat;
+    const y = e.latlng.lng;
+    const name = prompt("Enter place name (city, road, subway)?");
     if(!name) return;
 
-    const marker=L.marker([lat,lng]).addTo(map).bindPopup(name);
-    marker.on('click',()=>selectStartEnd(marker,{lat,lng,name}));
+    const type = prompt("Type: city, road, subway?");
+    if(!type) return;
 
-    cities.push({name,lat,lng,marker});
+    switch(type.toLowerCase()){
+      case "city":
+        const marker = L.marker([x,y]).addTo(map).bindPopup(name);
+        marker.on('click', ()=> selectStartEnd(marker,{x,y,name}));
+        cities.push({name,x,y,marker});
+        break;
+      case "road":
+        const roadLine = L.polyline([[x,y],[x+20,y]],{color:'gray',weight:3}).addTo(map).bindPopup(name);
+        roads.push({name,coords:[[x,y],[x+20,y]]});
+        break;
+      case "subway":
+        const subwayLine = L.polyline([[x,y],[x+20,y+20]],{color:'orange',weight:5}).addTo(map).bindPopup(name);
+        subwayLines.push({name,coords:[[x,y],[x+20,y+20]]});
+        break;
+      default:
+        alert("Invalid type!");
+    }
   });
 
-  // Add city by search (fake coordinates)
   function searchPlace(){
-    const name=document.getElementById("search").value;
+    const name = document.getElementById("search").value;
     if(!name) return alert("Enter city name");
 
-    const lat=Math.random()*160-80;
-    const lng=Math.random()*360-180;
+    const x = Math.random()*700;
+    const y = Math.random()*700;
 
-    const marker=L.marker([lat,lng]).addTo(map).bindPopup(name);
-    marker.on('click',()=>selectStartEnd(marker,{lat,lng,name}));
+    const marker = L.marker([x,y]).addTo(map).bindPopup(name);
+    marker.on('click', ()=> selectStartEnd(marker,{x,y,name}));
 
-    cities.push({name,lat,lng,marker});
-    map.setView([lat,lng],4);
+    cities.push({name,x,y,marker});
   }
 
   function selectStartEnd(marker,point){
     if(!startPoint){
-      startPoint=point;
+      startPoint = point;
       marker.bindPopup(point.name+" (START)").openPopup();
-      document.getElementById("instructions").innerText="START set. Select END point.";
+      document.getElementById("instructions").innerText="START set. Now click END city.";
     } else if(!endPoint && point!==startPoint){
-      endPoint=point;
+      endPoint = point;
       marker.bindPopup(point.name+" (END)").openPopup();
       document.getElementById("instructions").innerText="END set. Click ▶️ Start Navigation.";
     }
   }
 
   function startNavigation(){
-    if(!startPoint||!endPoint) return alert("Select START and END points");
+    if(!startPoint || !endPoint) return alert("Select START and END points");
 
-    // Find subway line closest to start and end
-    let line=null;
-    subwayLines.forEach(l=>{
-      const startDist=l.coords.reduce((a,c)=>Math.min(a,distance(c,[startPoint.lat,startPoint.lng])),Infinity);
-      const endDist=l.coords.reduce((a,c)=>Math.min(a,distance(c,[endPoint.lat,endPoint.lng])),Infinity);
-      if(startDist<5 && endDist<5) line=l;
-    });
+    // Combine roads + subway for routing
+    let allLines = roads.concat(subwayLines);
+    if(allLines.length===0){
+      // No lines, just straight line
+      routeCoords = [[startPoint.x,startPoint.y],[endPoint.x,endPoint.y]];
+    } else {
+      // Simple "closest line" path: move along first line near start, then straight to end
+      let closestLine = allLines.reduce((best,line)=>{
+        const dist = line.coords.reduce((min,c)=>Math.min(min,distance(c,[startPoint.x,startPoint.y])),Infinity);
+        return dist<best.dist?{line,line,dist}:best;
+      },{line:null,dist:Infinity}).line;
 
-    if(!line) return alert("No single subway line connects start and end. Using straight line route.");
+      if(closestLine){
+        routeCoords = [ [startPoint.x,startPoint.y], ...closestLine.coords, [endPoint.x,endPoint.y] ];
+      } else {
+        routeCoords = [[startPoint.x,startPoint.y],[endPoint.x,endPoint.y]];
+      }
+    }
 
-    // GPS route along subway
-    let startIdx=line.coords.reduce((i,c,idx)=>distance(c,[startPoint.lat,startPoint.lng])<distance(line.coords[i],[startPoint.lat,startPoint.lng])?idx:i,0);
-    let endIdx=line.coords.reduce((i,c,idx)=>distance(c,[endPoint.lat,endPoint.lng])<distance(line.coords[i],[endPoint.lat,endPoint.lng])?idx:i,0);
+    L.polyline(routeCoords,{color:'blue',weight:3,dashArray:'5,5'}).addTo(map);
 
-    if(startIdx>endIdx) [startIdx,endIdx]=[endIdx,startIdx];
-    routeCoords=line.coords.slice(startIdx,endIdx+1);
-
-    L.polyline(routeCoords,{color:line.color,weight:5,dashArray:'5,5'}).addTo(map);
-
-    startMoving();
-  }
-
-  function startMoving(){
     step=0;
     if(gpsMarker) map.removeLayer(gpsMarker);
-    gpsMarker=L.circleMarker(routeCoords[0],{radius:8,color:'red'}).addTo(map);
+    gpsMarker = L.circleMarker(routeCoords[0],{radius:8,color:'red'}).addTo(map);
     move();
   }
 
   function move(){
     if(step>=routeCoords.length){
-      document.getElementById("instructions")="🎉 Arrived at "+endPoint.name+"!";
+      document.getElementById("instructions").innerText="🎉 Arrived at "+endPoint.name+"!";
       return;
     }
     gpsMarker.setLatLng(routeCoords[step]);
     map.setView(routeCoords[step]);
-    document.getElementById("instructions").innerText="🚇 Traveling to "+endPoint.name+"...";
+    document.getElementById("instructions").innerText="🚗 Moving towards "+endPoint.name+"...";
     step++;
-    setTimeout(move,150);
+    setTimeout(move,200);
   }
 
-  function distance(a,b){ // simple Euclidean
+  function distance(a,b){
     return Math.sqrt(Math.pow(a[0]-b[0],2)+Math.pow(a[1]-b[1],2));
   }
 
 </script>
+
 </body>
 </html>
