@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Editable Subway Map with Stations</title>
+  <title>Imaginary Country Map - Stations & Landmarks</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.pm/dist/leaflet.pm.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -15,29 +15,28 @@
 </head>
 <body>
 
-<h2 style="text-align:center;">Editable Subway & Stations Map</h2>
-<input type="text" id="search" placeholder="Add city by name">
-<button onclick="searchPlace()">🔍 Add City</button>
+<h2 style="text-align:center;">Imaginary Country Map - Stations & Landmarks</h2>
+<input type="text" id="search" placeholder="Add place name">
+<button onclick="searchPlace()">🔍 Add Place</button>
 <button onclick="startNavigation()">▶️ Start Navigation</button>
 
 <div id="map"></div>
 <div id="instructions">
-Click map to add cities, roads, subway lines, landmarks.  
-Stations can be moved, added, or deleted. Lines can be reshaped.  
-Select START & END cities for navigation.
+Click map to add cities, landmarks, roads, subway lines.  
+Stations are always visible on top. Start & End points can be landmarks.  
+Stations and lines are editable, movable, and deletable.
 </div>
 
 <script>
-const map = L.map('map', { crs: L.CRS.Simple, minZoom: -1, maxZoom: 2 }).setView([350, 350], 0);
+const map = L.map('map', { crs: L.CRS.Simple, minZoom: -1, maxZoom: 2 }).setView([350,350],0);
 const bounds = [[0,0],[700,700]];
 L.rectangle(bounds,{color:'#fefefe',weight:1}).addTo(map);
 map.fitBounds(bounds);
 
-let cities=[], roads=[], subwayLines=[], subwayStations=[], landmarks=[];
+let places=[], roads=[], subwayLines=[], subwayStations=[];
 let startPoint=null, endPoint=null;
 let routeCoords=[], gpsMarker, step=0;
 
-// Enable editing
 map.pm.addControls({
     position:'topright',
     drawMarker:false,
@@ -49,20 +48,21 @@ map.pm.addControls({
     removalMode:true
 });
 
-// Click to add objects
+// Click map to add objects
 map.on('click', function(e){
     const x=e.latlng.lat, y=e.latlng.lng;
-    const name=prompt("Enter name:");
+    const name=prompt("Enter place name:");
     if(!name) return;
-
-    const type=prompt("Type: city, road, subway, landmark?");
+    const type=prompt("Type: city, landmark, road, subway?");
     if(!type) return;
 
     switch(type.toLowerCase()){
         case "city":
-            const marker=L.marker([x,y]).addTo(map).bindPopup(name);
-            marker.on('click', ()=> selectStartEnd(marker,{x,y,name}));
-            cities.push({name,x,y,marker});
+        case "landmark":
+            const markerColor = type.toLowerCase() === "landmark" ? "purple" : "green";
+            const marker = L.circleMarker([x,y],{radius:8,color:markerColor,fillOpacity:1,weight:2}).addTo(map).bindPopup(name+" ("+type+")");
+            marker.on('click', ()=> selectStartEnd(marker,{x,y,name,type}));
+            places.push({name,x,y,type,marker});
             break;
 
         case "road":
@@ -75,19 +75,7 @@ map.on('click', function(e){
             const subwayLine=L.polyline([[x,y],[x+50,y+50]],{color:'orange',weight:5}).addTo(map).bindPopup(name);
             subwayLine.pm.enable({allowSelfIntersection:true});
             subwayLines.push({name,layer:subwayLine});
-
-            // Add stations
             addStations(subwayLine);
-            break;
-
-        case "landmark":
-            const landmarkType=prompt("Landmark type (mountain, river, castle, etc)?");
-            let color='purple';
-            if(landmarkType==='mountain') color='brown';
-            else if(landmarkType==='river') color='blue';
-            else if(landmarkType==='castle') color='gold';
-            L.circleMarker([x,y],{radius:8,color:color}).addTo(map).bindPopup(name+" ("+landmarkType+")");
-            landmarks.push({name,type:landmarkType,x,y});
             break;
 
         default:
@@ -95,39 +83,42 @@ map.on('click', function(e){
     }
 });
 
-// Function to add stations along a subway line
+// Add stations along subway lines
 function addStations(line){
-    let addMore = true;
+    let addMore=true;
     while(addMore){
-        const coords = line.getLatLngs();
-        const t=prompt("Add a station? Type 'no' to stop, or a number 0-1 to place along line");
+        const t=prompt("Add a station? Type a number 0-1 along line, or 'no' to stop");
         if(t==='no') break;
         const pos=parseFloat(t);
         if(isNaN(pos)||pos<0||pos>1) continue;
-        const sx = coords[0].lat*(1-pos)+coords[coords.length-1].lat*pos;
-        const sy = coords[0].lng*(1-pos)+coords[coords.length-1].lng*pos;
-        const sName = prompt("Station name:");
+        const coords=line.getLatLngs();
+        const sx=coords[0].lat*(1-pos)+coords[coords.length-1].lat*pos;
+        const sy=coords[0].lng*(1-pos)+coords[coords.length-1].lng*pos;
+        const sName=prompt("Station name:");
         if(!sName) continue;
-        const sMarker = L.circleMarker([sx,sy],{radius:6,color:'red',pm:true}).addTo(map).bindPopup(sName);
-        sMarker.pm.enable({draggable:true, snappable:true});
-        subwayStations.push({name:sName,x:sx,y:sy,marker:sMarker, line:line});
+        const sMarker=L.circleMarker([sx,sy],{radius:6,color:'red',fillOpacity:1,weight:2}).addTo(map).bindPopup(sName);
+        sMarker.pm.enable({draggable:true,snappable:true});
+        sMarker.setZIndexOffset(1000); // always visible on top
+        subwayStations.push({name:sName,x:sx,y:sy,marker:sMarker,line:line});
     }
 }
 
+// Search bar to add random place
 function searchPlace(){
-    const name = document.getElementById("search").value;
-    if(!name) return alert("Enter city name");
+    const name=document.getElementById("search").value;
+    if(!name) return alert("Enter place name");
     const x=Math.random()*700, y=Math.random()*700;
-    const marker=L.marker([x,y]).addTo(map).bindPopup(name);
-    marker.on('click', ()=> selectStartEnd(marker,{x,y,name}));
-    cities.push({name,x,y,marker});
+    const marker=L.circleMarker([x,y],{radius:8,color:'green',fillOpacity:1,weight:2}).addTo(map).bindPopup(name+" (city)");
+    marker.on('click', ()=> selectStartEnd(marker,{x,y,name,type:'city'}));
+    places.push({name,x,y,type:'city',marker});
 }
 
+// Start/End selection
 function selectStartEnd(marker,point){
     if(!startPoint){
         startPoint=point;
         marker.bindPopup(point.name+" (START)").openPopup();
-        document.getElementById("instructions").innerText="START set. Now click END city.";
+        document.getElementById("instructions").innerText="START set. Now click END place.";
     } else if(!endPoint && point!==startPoint){
         endPoint=point;
         marker.bindPopup(point.name+" (END)").openPopup();
@@ -135,30 +126,28 @@ function selectStartEnd(marker,point){
     }
 }
 
-// Navigation along lines + walking
+// Navigation simulation
 function startNavigation(){
-    if(!startPoint || !endPoint) return alert("Select START and END points");
-
-    let allLines = roads.concat(subwayLines);
+    if(!startPoint||!endPoint) return alert("Select START and END points");
+    let allLines=roads.concat(subwayLines);
     routeCoords=[];
     if(allLines.length>0){
-        let closestLine = allLines.reduce((best,line)=>{
-            const coords = line.layer.getLatLngs();
-            const dist = coords.reduce((min,c)=>Math.min(min,distance([c.lat,c.lng],[startPoint.x,startPoint.y])),Infinity);
+        let closestLine=allLines.reduce((best,line)=>{
+            const coords=line.layer.getLatLngs();
+            const dist=coords.reduce((min,c)=>Math.min(min,distance([c.lat,c.lng],[startPoint.x,startPoint.y])),Infinity);
             return dist<best.dist?{line,line,dist}:best;
         },{line:null,dist:Infinity}).line;
 
         if(closestLine){
-            const coords = closestLine.layer.getLatLngs().map(c=>[c.lat,c.lng]);
+            const coords=closestLine.layer.getLatLngs().map(c=>[c.lat,c.lng]);
             routeCoords.push([startPoint.x,startPoint.y], ...coords, [endPoint.x,endPoint.y]);
         } else routeCoords.push([startPoint.x,startPoint.y],[endPoint.x,endPoint.y]);
     } else routeCoords.push([startPoint.x,startPoint.y],[endPoint.x,endPoint.y]);
 
     L.polyline(routeCoords,{color:'blue',weight:3,dashArray:'5,5'}).addTo(map);
-
     step=0;
     if(gpsMarker) map.removeLayer(gpsMarker);
-    gpsMarker = L.circleMarker(routeCoords[0],{radius:8,color:'red'}).addTo(map);
+    gpsMarker=L.circleMarker(routeCoords[0],{radius:8,color:'red',fillOpacity:1}).addTo(map);
     move();
 }
 
@@ -167,7 +156,7 @@ function move(){
         document.getElementById("instructions").innerText="🎉 Arrived at "+endPoint.name+"!";
         return;
     }
-    let speed = 200;
+    let speed=200;
     if(!onLine(routeCoords[step])) speed=400;
     gpsMarker.setLatLng(routeCoords[step]);
     map.setView(routeCoords[step]);
@@ -177,17 +166,16 @@ function move(){
 }
 
 function onLine(point){
-    const allLines = roads.concat(subwayLines);
+    const allLines=roads.concat(subwayLines);
     for(let line of allLines){
-        const coords = line.layer.getLatLngs().map(c=>[c.lat,c.lng]);
-        for(let c of coords){
-            if(distance(point,c)<10) return true;
-        }
+        const coords=line.layer.getLatLngs().map(c=>[c.lat,c.lng]);
+        for(let c of coords) if(distance(point,c)<10) return true;
     }
     return false;
 }
 
 function distance(a,b){return Math.sqrt(Math.pow(a[0]-b[0],2)+Math.pow(a[1]-b[1],2));}
+
 </script>
 </body>
 </html>
